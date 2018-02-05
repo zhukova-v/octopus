@@ -1,0 +1,99 @@
+version: "2"
+
+services:
+  web:
+    restart: always
+    build: ./web
+    container_name: web
+    volumes:
+      - ./web/laravel:/var/www/replication.com
+    ports:
+      - 9000:80
+    networks:
+      - back
+    links:
+      - slave
+      - master_shard_1
+      - master_shard_2
+
+  slave:
+      build:
+        context: database/slave
+      container_name: slave
+      hostname: slave
+      ports:
+        - 9001:3306
+      volumes:
+        - slave-data:/var/lib/mariadb/slave
+        - ./database/slave/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      environment:
+        MYSQL_ROOT_PASSWORD: "root"
+        MYSQL_USER: "replicant"
+        MYSQL_DATABASE: "test"
+        MYSQL_PASSWORD: "pass"
+      networks:
+       - back
+      links:
+       - master_shard_1
+       - master_shard_2
+      depends_on:
+       - master_shard_2
+       - master_shard_1
+
+
+  master_shard_1:
+      build:
+        context: database/master1
+      container_name: master_shard_1
+      hostname: shard1
+      volumes:
+        - shard1-data:/var/lib/mariadb/shard_1
+        - ./database/master1/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      ports:
+        - 9002:3306
+      environment:
+        MYSQL_ROOT_PASSWORD: "root"
+      networks:
+        - back
+
+  master_shard_2:
+      build:
+        context: database/master2
+      container_name: master_shard_2
+      hostname: shard2
+      volumes:
+        - shard2-data:/var/lib/mariadb/shard_2
+        - ./database/master2/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      ports:
+        - 9003:3306
+      environment:
+        MYSQL_ROOT_PASSWORD: "root"
+      networks:
+        - back
+  spider:
+        build:
+          context: database/spider
+        container_name: spider
+        volumes:
+          - spider-data:/var/lib/mariadb/spider
+          - ./database/master2/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+        ports:
+          - 9004:3306
+        environment:
+          MYSQL_ROOT_PASSWORD: "root"
+          MYSQL_USER: "replicant"
+          MYSQL_DATABASE: "test"
+          MYSQL_PASSWORD: "pass"
+        networks:
+         - back
+
+volumes:
+    slave-data:
+    shard1-data:
+    shard2-data:
+    spider-data:
+
+networks:
+    back:
+      driver:
+        'bridge'
